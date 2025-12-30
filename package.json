@@ -1,0 +1,41 @@
+{
+    "name": "kafka-cluster-admin",
+    "version": "1.0.0",
+    "description": "Kafka multi-broker cluster administration tool",
+    "main": "admin.js",
+    "scripts": {
+      "start": "node admin.js create",
+      "create-topics": "node admin.js create",
+      "list-topics": "node admin.js list",
+      "describe-topic": "node admin.js describe",
+      "delete-topic": "node admin.js delete",
+      "cluster-health": "node admin.js health",
+      "cluster-info": "node admin.js info",
+      "dev": "node -r dotenv/config admin.js",
+      "test": "node -r dotenv/config test.js",
+      "test-failover": "node test-broker-failure.js",
+      "test-interactive": "node test-broker-failure.js interactive",
+      "monitor": "node monitor-cluster.js",
+      "monitor-check": "node monitor-cluster.js check",
+      "quick-test": "node quick-test.js",
+      "start-producer": "node producer-test.js",
+      "start-consumer": "node consumer-test.js",
+      "kill-broker1": "docker-compose stop kafka1",
+      "kill-broker2": "docker-compose stop kafka2",
+      "kill-broker3": "docker-compose stop kafka3",
+      "restart-all": "docker-compose start kafka1 kafka2 kafka3",
+      "check-replication": "node admin.js describe broker-failure-test-topic"
+    },
+    "dependencies": {
+      "kafkajs": "^2.2.4",
+      "dotenv": "^16.3.1",
+      "commander": "^11.1.0",
+      "chalk": "^4.1.2"
+    },
+    "devDependencies": {
+      "@types/node": "^20.8.0"
+    },
+    "keywords": ["kafka", "cluster", "admin", "multi-broker"],
+    "author": "",
+    "license": "MIT"
+  }

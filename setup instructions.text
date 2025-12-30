@@ -1,0 +1,722 @@
+Here's the upgraded version with multiple Kafka brokers:
+
+## 1. `docker-compose.yml` (Multi-Broker Setup)
+
+```yaml
+version: '3.8'
+
+services:
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.4.0
+    container_name: zookeeper
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+      ZOOKEEPER_SERVER_ID: 1
+      ZOOKEEPER_SERVERS: zookeeper:2888:3888;zookeeper2:2888:3888;zookeeper3:2888:3888
+    ports:
+      - "2181:2181"
+    networks:
+      - kafka-network
+
+  zookeeper2:
+    image: confluentinc/cp-zookeeper:7.4.0
+    container_name: zookeeper2
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2182
+      ZOOKEEPER_TICK_TIME: 2000
+      ZOOKEEPER_SERVER_ID: 2
+      ZOOKEEPER_SERVERS: zookeeper:2888:3888;zookeeper2:2888:3888;zookeeper3:2888:3888
+    ports:
+      - "2182:2182"
+    networks:
+      - kafka-network
+
+  zookeeper3:
+    image: confluentinc/cp-zookeeper:7.4.0
+    container_name: zookeeper3
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2183
+      ZOOKEEPER_TICK_TIME: 2000
+      ZOOKEEPER_SERVER_ID: 3
+      ZOOKEEPER_SERVERS: zookeeper:2888:3888;zookeeper2:2888:3888;zookeeper3:2888:3888
+    ports:
+      - "2183:2183"
+    networks:
+      - kafka-network
+
+  kafka1:
+    image: confluentinc/cp-kafka:7.4.0
+    container_name: kafka1
+    hostname: kafka1
+    depends_on:
+      - zookeeper
+      - zookeeper2
+      - zookeeper3
+    ports:
+      - "9091:9091"
+      - "19091:19091"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181,zookeeper2:2182,zookeeper3:2183
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka1:19091,PLAINTEXT_HOST://localhost:9091
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 3
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 2
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 3
+      KAFKA_DEFAULT_REPLICATION_FACTOR: 3
+      KAFKA_NUM_PARTITIONS: 3
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: 'false'
+    networks:
+      - kafka-network
+
+  kafka2:
+    image: confluentinc/cp-kafka:7.4.0
+    container_name: kafka2
+    hostname: kafka2
+    depends_on:
+      - zookeeper
+      - zookeeper2
+      - zookeeper3
+    ports:
+      - "9092:9092"
+      - "19092:19092"
+    environment:
+      KAFKA_BROKER_ID: 2
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181,zookeeper2:2182,zookeeper3:2183
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka2:19092,PLAINTEXT_HOST://localhost:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 3
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 2
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 3
+      KAFKA_DEFAULT_REPLICATION_FACTOR: 3
+      KAFKA_NUM_PARTITIONS: 3
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: 'false'
+    networks:
+      - kafka-network
+
+  kafka3:
+    image: confluentinc/cp-kafka:7.4.0
+    container_name: kafka3
+    hostname: kafka3
+    depends_on:
+      - zookeeper
+      - zookeeper2
+      - zookeeper3
+    ports:
+      - "9093:9093"
+      - "19093:19093"
+    environment:
+      KAFKA_BROKER_ID: 3
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181,zookeeper2:2182,zookeeper3:2183
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka3:19093,PLAINTEXT_HOST://localhost:9093
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 3
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 2
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 3
+      KAFKA_DEFAULT_REPLICATION_FACTOR: 3
+      KAFKA_NUM_PARTITIONS: 3
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: 'false'
+    networks:
+      - kafka-network
+
+  kafka-ui:
+    image: provectuslabs/kafka-ui:latest
+    container_name: kafka-ui
+    depends_on:
+      - kafka1
+      - kafka2
+      - kafka3
+    ports:
+      - "8080:8080"
+    environment:
+      KAFKA_CLUSTERS_0_NAME: kafka-cluster
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka1:19091,kafka2:19092,kafka3:19093
+      KAFKA_CLUSTERS_0_ZOOKEEPER: zookeeper:2181,zookeeper2:2182,zookeeper3:2183
+    networks:
+      - kafka-network
+
+networks:
+  kafka-network:
+    driver: bridge
+```
+
+## 2. Updated `admin.js` (Multi-Broker Support)
+
+```javascript
+const { Kafka, logLevel } = require('kafkajs');
+require('dotenv').config();
+
+// Get broker configuration from environment or use defaults
+const KAFKA_BROKERS = process.env.KAFKA_BROKERS 
+  ? process.env.KAFKA_BROKERS.split(',') 
+  : ['localhost:9091', 'localhost:9092', 'localhost:9093'];
+
+const KAFKA_CLIENT_ID = process.env.KAFKA_CLIENT_ID || 'kafka-admin-cluster';
+
+// Create Kafka instance with multiple brokers
+const kafka = new Kafka({
+  clientId: KAFKA_CLIENT_ID,
+  brokers: KAFKA_BROKERS,
+  logLevel: logLevel.INFO,
+  retry: {
+    initialRetryTime: 100,
+    retries: 8,
+    maxRetryTime: 30000,
+  },
+});
+
+// Create admin client
+const admin = kafka.admin();
+
+// Define topics with replication factor 3 (matching our 3 brokers)
+const topics = [
+  {
+    topic: 'user-registrations',
+    numPartitions: 6, // Increased partitions for better distribution
+    replicationFactor: 3, // Full replication across all brokers
+    configEntries: [
+      { name: 'retention.ms', value: '604800000' }, // 7 days
+      { name: 'cleanup.policy', value: 'delete' },
+      { name: 'min.insync.replicas', value: '2' }, // At least 2 replicas must acknowledge
+    ],
+  },
+  {
+    topic: 'order-events',
+    numPartitions: 9, // More partitions for high throughput
+    replicationFactor: 3,
+    configEntries: [
+      { name: 'retention.ms', value: '2592000000' }, // 30 days
+      { name: 'cleanup.policy', value: 'compact,delete' },
+      { name: 'min.insync.replicas', value: '2' },
+      { name: 'compression.type', value: 'lz4' }, // Enable compression
+    ],
+  },
+  {
+    topic: 'payment-transactions',
+    numPartitions: 3,
+    replicationFactor: 3,
+    configEntries: [
+      { name: 'retention.ms', value: '86400000' }, // 1 day
+      { name: 'min.insync.replicas', value: '2' },
+      { name: 'message.timestamp.type', value: 'LogAppendTime' },
+    ],
+  },
+  {
+    topic: 'inventory-updates',
+    numPartitions: 6,
+    replicationFactor: 3,
+    configEntries: [
+      { name: 'retention.bytes', value: '1073741824' }, // 1 GB
+      { name: 'min.insync.replicas', value: '2' },
+      { name: 'segment.bytes', value: '268435456' }, // 256 MB segments
+    ],
+  },
+  {
+    topic: 'notification-events',
+    numPartitions: 3,
+    replicationFactor: 3,
+    configEntries: [
+      { name: 'retention.ms', value: '172800000' }, // 2 days
+      { name: 'min.insync.replicas', value: '2' },
+    ],
+  },
+  // System topics with higher replication
+  {
+    topic: 'audit-logs',
+    numPartitions: 3,
+    replicationFactor: 3,
+    configEntries: [
+      { name: 'retention.ms', value: '31536000000' }, // 1 year
+      { name: 'cleanup.policy', value: 'delete' },
+      { name: 'min.insync.replicas', value: '3' }, // All replicas must acknowledge
+    ],
+  },
+];
+
+async function getClusterInfo() {
+  try {
+    console.log('Connecting to Kafka cluster...');
+    await admin.connect();
+    
+    const clusterMetadata = await admin.describeCluster();
+    
+    console.log('\n=== Kafka Cluster Information ===');
+    console.log(`Cluster ID: ${clusterMetadata.clusterId}`);
+    console.log(`Controller Broker ID: ${clusterMetadata.controller}`);
+    console.log(`Number of Brokers: ${clusterMetadata.brokers.length}`);
+    
+    console.log('\nBrokers:');
+    clusterMetadata.brokers.forEach(broker => {
+      console.log(`  Broker ${broker.nodeId}: ${broker.host}:${broker.port}`);
+    });
+    
+    return clusterMetadata;
+  } catch (error) {
+    console.error('Error fetching cluster info:', error);
+    throw error;
+  }
+}
+
+async function createTopics() {
+  try {
+    // Get cluster info first
+    const clusterInfo = await getClusterInfo();
+    const brokerCount = clusterInfo.brokers.length;
+    
+    console.log(`\nCluster has ${brokerCount} brokers available`);
+    
+    // Adjust replication factor if needed
+    topics.forEach(topic => {
+      if (topic.replicationFactor > brokerCount) {
+        console.warn(`Warning: Topic "${topic.topic}" replication factor (${topic.replicationFactor}) exceeds available brokers (${brokerCount}). Setting to ${brokerCount}.`);
+        topic.replicationFactor = brokerCount;
+      }
+    });
+
+    // Check if topics already exist
+    const existingTopics = await admin.listTopics();
+    console.log('\nExisting topics:', existingTopics.length);
+
+    // Filter out topics that don't exist yet
+    const topicsToCreate = topics.filter(
+      (topicConfig) => !existingTopics.includes(topicConfig.topic)
+    );
+
+    if (topicsToCreate.length === 0) {
+      console.log('All topics already exist.');
+      return;
+    }
+
+    console.log(`\nCreating ${topicsToCreate.length} topics...`);
+    
+    // Create topics with cluster-aware settings
+    await admin.createTopics({
+      topics: topicsToCreate,
+      validateOnly: false,
+      waitForLeaders: true,
+      timeout: 60000, // 60 seconds for multi-broker setup
+    });
+
+    console.log('\n✅ Topics created successfully!');
+
+    // Verify topics were created
+    const metadata = await admin.fetchTopicMetadata({
+      topics: topics.map(t => t.topic),
+    });
+    
+    console.log('\n=== Created Topics Summary ===');
+    metadata.topics.forEach((topic) => {
+      const partitionCount = topic.partitions.length;
+      const replicationFactor = topic.partitions[0]?.replicas?.length || 0;
+      console.log(`\nTopic: ${topic.name}`);
+      console.log(`  Partitions: ${partitionCount}`);
+      console.log(`  Replication Factor: ${replicationFactor}`);
+      
+      // Show partition distribution
+      const leaderDistribution = {};
+      topic.partitions.forEach((partition) => {
+        const leader = partition.leader;
+        leaderDistribution[leader] = (leaderDistribution[leader] || 0) + 1;
+      });
+      
+      console.log('  Partition Leaders Distribution:');
+      Object.entries(leaderDistribution).forEach(([leaderId, count]) => {
+        console.log(`    Broker ${leaderId}: ${count} partitions`);
+      });
+    });
+
+  } catch (error) {
+    console.error('\n❌ Error creating topics:', error);
+    if (error.code) {
+      console.error(`Error Code: ${error.code}`);
+    }
+    if (error.retriable !== undefined) {
+      console.error(`Retriable: ${error.retriable}`);
+    }
+  } finally {
+    await admin.disconnect();
+    console.log('\nDisconnected from Kafka cluster.');
+  }
+}
+
+async function describeTopic(topicName) {
+  try {
+    await admin.connect();
+    
+    console.log(`\nFetching details for topic: ${topicName}`);
+    
+    const metadata = await admin.fetchTopicMetadata({ topics: [topicName] });
+    
+    if (metadata.topics.length === 0) {
+      console.log(`Topic "${topicName}" not found.`);
+      return;
+    }
+    
+    const topic = metadata.topics[0];
+    
+    console.log(`\n=== Topic: ${topic.name} ===`);
+    console.log(`Partitions: ${topic.partitions.length}`);
+    
+    topic.partitions.forEach((partition) => {
+      console.log(`\nPartition ${partition.partitionId}:`);
+      console.log(`  Leader: Broker ${partition.leader}`);
+      console.log(`  Replicas: [${partition.replicas.join(', ')}]`);
+      console.log(`  ISR (In-Sync Replicas): [${partition.isr.join(', ')}]`);
+    });
+    
+    // Get topic configuration
+    const configs = await admin.describeConfigs({
+      resources: [{ type: 2, name: topicName }] // Type 2 = TOPIC
+    });
+    
+    console.log('\nTopic Configuration:');
+    configs.resources.forEach(resource => {
+      resource.configEntries.forEach(config => {
+        if (!config.isDefault) {
+          console.log(`  ${config.name}: ${config.value} (${config.isSensitive ? 'Sensitive' : 'Source: ' + config.source})`);
+        }
+      });
+    });
+    
+  } catch (error) {
+    console.error(`Error describing topic ${topicName}:`, error);
+  } finally {
+    await admin.disconnect();
+  }
+}
+
+async function deleteTopic(topicName) {
+  try {
+    await admin.connect();
+    console.log(`\nDeleting topic: ${topicName}`);
+    
+    await admin.deleteTopics({
+      topics: [topicName],
+      timeout: 60000,
+    });
+    
+    console.log(`✅ Topic "${topicName}" deleted successfully.`);
+  } catch (error) {
+    console.error(`❌ Error deleting topic ${topicName}:`, error);
+  } finally {
+    await admin.disconnect();
+  }
+}
+
+async function listTopics() {
+  try {
+    await admin.connect();
+    const topicsList = await admin.listTopics();
+    
+    console.log('\n=== All Topics ===');
+    console.log(`Total Topics: ${topicsList.length}`);
+    
+    // Get metadata for all topics
+    const metadata = await admin.fetchTopicMetadata();
+    
+    console.log('\nTopic Details:');
+    metadata.topics.forEach((topic, index) => {
+      const partitions = topic.partitions.length;
+      const replicationFactor = topic.partitions[0]?.replicas?.length || 0;
+      console.log(`\n${index + 1}. ${topic.name}`);
+      console.log(`   Partitions: ${partitions}`);
+      console.log(`   Replication Factor: ${replicationFactor}`);
+    });
+    
+  } catch (error) {
+    console.error('Error listing topics:', error);
+  } finally {
+    await admin.disconnect();
+  }
+}
+
+async function checkClusterHealth() {
+  try {
+    console.log('Checking cluster health...');
+    await admin.connect();
+    
+    const clusterInfo = await admin.describeCluster();
+    console.log(`\n✅ Cluster is healthy`);
+    console.log(`   Cluster ID: ${clusterInfo.clusterId}`);
+    console.log(`   Controller: Broker ${clusterInfo.controller}`);
+    console.log(`   Active Brokers: ${clusterInfo.brokers.length}`);
+    
+    // Check each broker
+    for (const broker of clusterInfo.brokers) {
+      console.log(`   ✓ Broker ${broker.nodeId}: ${broker.host}:${broker.port}`);
+    }
+    
+    return true;
+  } catch (error) {
+    console.error('\n❌ Cluster health check failed:', error.message);
+    return false;
+  } finally {
+    await admin.disconnect();
+  }
+}
+
+// CLI interface
+async function main() {
+  const command = process.argv[2];
+  const arg = process.argv[3];
+  
+  console.log(`Kafka Brokers: ${KAFKA_BROKERS.join(', ')}`);
+  
+  switch (command) {
+    case 'create':
+      await createTopics();
+      break;
+    case 'list':
+      await listTopics();
+      break;
+    case 'describe':
+      if (!arg) {
+        console.error('Please provide a topic name to describe');
+        process.exit(1);
+      }
+      await describeTopic(arg);
+      break;
+    case 'delete':
+      if (!arg) {
+        console.error('Please provide a topic name to delete');
+        process.exit(1);
+      }
+      await deleteTopic(arg);
+      break;
+    case 'health':
+      await checkClusterHealth();
+      break;
+    case 'info':
+      await getClusterInfo();
+      break;
+    default:
+      console.log(`
+🚀 Kafka Multi-Broker Admin Tool 🚀
+
+Usage:
+  node admin.js create     - Create all predefined topics
+  node admin.js list       - List all topics with details
+  node admin.js describe <topic> - Describe specific topic
+  node admin.js delete <topic>   - Delete a specific topic
+  node admin.js health     - Check cluster health
+  node admin.js info       - Show cluster information
+
+Example:
+  node admin.js create
+  node admin.js list
+  node admin.js describe user-registrations
+  node admin.js delete user-registrations
+  node admin.js health
+      `);
+  }
+}
+
+// Run if called directly
+if (require.main === module) {
+  main().catch(console.error);
+}
+
+module.exports = {
+  createTopics,
+  listTopics,
+  describeTopic,
+  deleteTopic,
+  checkClusterHealth,
+  getClusterInfo,
+  admin,
+  topics,
+  kafka,
+};
+```
+
+## 3. Updated `package.json`
+
+```json
+{
+  "name": "kafka-cluster-admin",
+  "version": "1.0.0",
+  "description": "Kafka multi-broker cluster administration tool",
+  "main": "admin.js",
+  "scripts": {
+    "start": "node admin.js create",
+    "create-topics": "node admin.js create",
+    "list-topics": "node admin.js list",
+    "describe-topic": "node admin.js describe",
+    "delete-topic": "node admin.js delete",
+    "cluster-health": "node admin.js health",
+    "cluster-info": "node admin.js info",
+    "dev": "node -r dotenv/config admin.js",
+    "test": "node -r dotenv/config test.js"
+  },
+  "dependencies": {
+    "kafkajs": "^2.2.4",
+    "dotenv": "^16.3.1",
+    "commander": "^11.1.0",
+    "chalk": "^4.1.2"
+  },
+  "devDependencies": {
+    "@types/node": "^20.8.0"
+  },
+  "keywords": ["kafka", "cluster", "admin", "multi-broker"],
+  "author": "",
+  "license": "MIT"
+}
+```
+
+## 4. Updated `.env`
+
+```env
+# Kafka Cluster Configuration
+KAFKA_BROKERS=localhost:9091,localhost:9092,localhost:9093
+KAFKA_CLIENT_ID=kafka-cluster-admin
+KAFKA_GROUP_ID=kafka-admin-group
+
+# Optional: SASL/SSL Configuration (if needed)
+# KAFKA_SASL_MECHANISM=plain
+# KAFKA_SASL_USERNAME=admin
+# KAFKA_SASL_PASSWORD=admin-secret
+# KAFKA_SSL=true
+
+# Admin Configuration
+DEFAULT_REPLICATION_FACTOR=3
+DEFAULT_PARTITIONS=3
+```
+
+## 5. `test.js` - Test Script
+
+```javascript
+const { kafka } = require('./admin');
+
+async function testProduceConsume() {
+  const producer = kafka.producer();
+  const consumer = kafka.consumer({ groupId: 'test-group' });
+
+  try {
+    // Connect
+    await producer.connect();
+    await consumer.connect();
+    
+    // Subscribe to test topic
+    await consumer.subscribe({ topic: 'test-topic', fromBeginning: true });
+    
+    // Produce messages
+    console.log('Producing test messages...');
+    await producer.send({
+      topic: 'test-topic',
+      messages: [
+        { key: 'key1', value: 'Hello Kafka Cluster!' },
+        { key: 'key2', value: 'Testing multi-broker setup' },
+        { key: 'key3', value: 'Message 3' },
+      ],
+    });
+    
+    console.log('Messages produced, starting consumer...');
+    
+    // Consume messages
+    await consumer.run({
+      eachMessage: async ({ topic, partition, message }) => {
+        console.log({
+          topic,
+          partition,
+          offset: message.offset,
+          key: message.key?.toString(),
+          value: message.value.toString(),
+        });
+      },
+    });
+    
+    // Wait for messages
+    await new Promise(resolve => setTimeout(resolve, 5000));
+    
+  } catch (error) {
+    console.error('Test failed:', error);
+  } finally {
+    await producer.disconnect();
+    await consumer.disconnect();
+  }
+}
+
+// Run test
+if (require.main === module) {
+  testProduceConsume().catch(console.error);
+}
+```
+
+## Setup Instructions:
+
+1. **Install dependencies:**
+```bash
+npm install
+```
+
+2. **Start the multi-broker cluster:**
+```bash
+docker-compose up -d
+```
+
+3. **Wait for all services to be ready (give it 2-3 minutes):**
+```bash
+# Check if all containers are running
+docker-compose ps
+
+# Check logs
+docker-compose logs -f kafka1
+```
+
+4. **Check cluster health:**
+```bash
+npm run cluster-health
+# or
+node admin.js health
+```
+
+5. **Create topics with replication across all brokers:**
+```bash
+npm run create-topics
+# or
+node admin.js create
+```
+
+6. **Access Kafka UI:**
+Open browser and go to: `http://localhost:8080`
+
+## Key Features of Multi-Broker Setup:
+
+1. **3 Zookeeper nodes** for high availability
+2. **3 Kafka brokers** for fault tolerance and load distribution
+3. **Replication Factor 3** for all topics (data copied to all brokers)
+4. **Min.insync.replicas = 2** (requires at least 2 brokers to acknowledge writes)
+5. **Increased partitions** for better parallelism
+6. **Health check commands** to verify cluster status
+7. **Detailed topic description** showing partition leaders and replica distribution
+
+## Commands Available:
+
+```bash
+# Cluster management
+node admin.js health          # Check cluster health
+node admin.js info           # Show cluster information
+
+# Topic management
+node admin.js create         # Create topics with replication
+node admin.js list           # List all topics
+node admin.js describe <topic> # Show detailed topic info
+node admin.js delete <topic>   # Delete a topic
+
+# Using npm scripts
+npm run cluster-health
+npm run create-topics
+npm run describe-topic -- test-topic
+```
+
+This setup provides a production-like Kafka cluster with redundancy, fault tolerance, and better performance characteristics.
+
+
+
+link:
+
+https://chat.deepseek.com/share/501p63749fsku02z9w
